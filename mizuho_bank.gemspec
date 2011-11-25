@@ -5,7 +5,7 @@
 
 Gem::Specification.new do |s|
   s.name = %q{mizuho_bank}
-  s.version = "0.1.0"
+  s.version = "0.1.1"
 
   s.required_rubygems_version = Gem::Requirement.new(">= 0") if s.respond_to? :required_rubygems_version=
   s.authors = ["kimoto"]
@@ -18,8 +18,7 @@ Gem::Specification.new do |s|
   ]
   s.files = [
     "VERSION",
-     "lib/mizuho_bank.rb",
-     "readme.txt"
+     "lib/mizuho_bank.rb"
   ]
   s.homepage = %q{http://github.com/kimoto/mizuho_bank}
   s.rdoc_options = ["--charset=UTF-8"]

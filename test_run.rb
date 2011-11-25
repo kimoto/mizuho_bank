@@ -1,7 +1,8 @@
 # encoding: utf-8
 Encoding.default_external = Encoding.default_internal = "UTF-8"
-require_relative 'mizuho_bank'
+require_relative 'lib/mizuho_bank'
 require 'pit'
+require 'yaml'
 
 pit = Pit.get("MizuhoBank", :require => {
   "keiyaku_no" => "keiyaku_no",
@@ -20,7 +21,6 @@ aikotoba_dict = {
   pit['aikotoba3_question'] => pit['aikotoba3_answer']
 }
 
-MizuhoBank.new(pit['keiyaku_no'].to_s, pit['password'].to_s, aikotoba_dict){ |bank|
-  p bank.info.main_account.money
-}
+require 'moji'
+puts MizuhoBank.new(pit['keiyaku_no'].to_s, pit['password'].to_s, aikotoba_dict, Logger.new(STDERR)).info.main_account.cache_flows.to_s
 

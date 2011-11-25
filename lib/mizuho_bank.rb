@@ -3,6 +3,33 @@ require 'mechanize'
 require 'kconv'
 require 'logger'
 require 'retry-handler'
+require 'moji'
+
+# utility class
+class String
+  def trim_no_number
+    self.gsub(/[^0-9]/, "")
+  end
+end
+
+class Time
+  def self.mizuho_time_parse(string)
+    p string
+  end
+end
+
+class Integer
+  def humanize
+    case 
+    when self < 1000
+      self
+    when self < 1000000
+      (self / 1000).to_s + "千円"
+    when self < 1000000000
+      (self / 1000000).to_s + "百万"
+    end
+  end
+end
 
 class MizuhoBank
   TOP_URL = "https://web.ib.mizuhobank.co.jp/servlet/mib?xtr=Emf00000"
@@ -144,25 +171,26 @@ class MizuhoBank
     info.last_logined_at = content.search("tr > td > table > tr > td > div > b")[2].text
     info.mailaddr = content.search("tr > td > table > tr > td > div > b")[4].text
 
-    account = MizuhoAccount.new
-    account.name = content.search("tr").search("./td/table")[2].search("table > tr")[3].search("table > tr > td > div")[1].text.toutf8.strip
-    account.deal_type = content.search("tr").search("./td/table")[2].search("table > tr")[3].search("table > tr > td > div")[3].text.toutf8.strip
-    account.number = content.search("tr").search("./td/table")[2].search("table > tr")[3].search("table > tr > td > div")[5].text.toutf8.strip
-    account.money = content.search("tr").search("./td/table")[2].search("table > tr")[3].search("table > tr > td > div")[7].text.toutf8.strip
-    account.usable_money = content.search("tr").search("./td/table")[2].search("table > tr")[3].search("table > tr > td > div")[9].text.toutf8.strip
+    account_tags = content.search("tr").search("./td/table")[2].search("table > tr")[3].search("table > tr > td > div")
 
     info.latest_cache_flows = []
-    info.main_account = account
+    info.main_account = MizuhoAccount.new(
+      :name => account_tags[1].text.toutf8.strip,
+      :deal_type => account_tags[3].text.toutf8.strip,
+      :number => account_tags[5].text.toutf8.strip.trim_no_number,
+      :money => account_tags[7].text.toutf8.strip.trim_no_number.to_i,
+      :usable_money => account_tags[9].text.toutf8.strip.trim_no_number.to_i
+    )
 
     records = content.search("tr").search("./td/table")[2].search("./tr/td/table/tr")[6].search("table > tr > td > div")
     10.times{ |n|
       i = (n + 1) * 4
 
       cacheflow = MizuhoCacheFlow.new
-      cacheflow.date = records[i+0].text.toutf8.strip
-      cacheflow.money_in = records[i+1].text.toutf8.strip
-      cacheflow.money_out = records[i+2].text.toutf8.strip
-      cacheflow.summary = records[i+3].text.toutf8.strip
+      cacheflow.date = Time.parse(records[i+0].text.toutf8.strip)
+      cacheflow.money_in = records[i+1].text.toutf8.strip.trim_no_number.to_i
+      cacheflow.money_out = records[i+2].text.toutf8.strip.trim_no_number.to_i
+      cacheflow.summary = Moji.normalize_zen_han(records[i+3].text.toutf8.strip)
       info.latest_cache_flows << cacheflow
     }
     info
@@ -170,21 +198,26 @@ class MizuhoBank
 
   def load_cacheflow_page(data)
     content = Nokogiri(data).search("#bodycontent > div > table")[4]
+    account_tags = content.search("./tr/td/table/tr/td/table/tr")[1].search("./td/table/tr/td/table/tr/td/div")
 
-    account = MizuhoAccount.new
-    account.name = content.search("./tr/td/table/tr/td/table/tr")[1].search("./td/table/tr/td/table/tr/td/div")[1].text.toutf8.strip
-    account.deal_type = content.search("./tr/td/table/tr/td/table/tr")[1].search("./td/table/tr/td/table/tr/td/div")[3].text.toutf8.strip
-    account.number = content.search("./tr/td/table/tr/td/table/tr")[1].search("./td/table/tr/td/table/tr/td/div")[5].text.toutf8.strip
-    account.money = content.search("./tr/td/table/tr/td/table/tr")[1].search("./td/table/tr/td/table/tr/td/div")[7].text.toutf8.strip
-    account.usable_money = content.search("./tr/td/table/tr/td/table/tr")[1].search("./td/table/tr/td/table/tr/td/div")[9].text.toutf8.strip
+    account = MizuhoAccount.new(
+      :name => account_tags[1].text.toutf8.strip,
+      :deal_type => account_tags[3].text.toutf8.strip,
+      :number => account_tags[5].text.toutf8.strip.trim_no_number.to_i,
+      :money => account_tags[7].text.toutf8.strip.trim_no_number.to_i,
+      :usable_money => account_tags[9].text.toutf8.strip.trim_no_number.to_i
+    )
 
     account.cache_flows = []
     flows = content.search("./tr/td/table/tr/td/table/tr")[4].search("./td/table/tr/td/table/tr/td/div").map(&:text).map(&:toutf8).map(&:strip)
     (flows.size / 4 - 1).times{ |n|
       i = (n + 1) * 4
-      cf = MizuhoCacheFlow.new
-      (cf.date, cf.money_in, cf.money_out, cf.summary) = [flows[i], flows[i+1], flows[i+2], flows[i+3]]
-      account.cache_flows << cf
+      account.cache_flows << MizuhoCacheFlow.new(
+        :date => Time.parse(flows[i]),
+        :money_out => flows[i+1].trim_no_number.to_i,
+        :money_in => flows[i+2].trim_no_number.to_i,
+        :summary => Moji.normalize_zen_han(flows[i+3])
+      )
     }
 
     account
@@ -214,15 +247,31 @@ class MizuhoBank
     attr_accessor :informations # reserved
     attr_accessor :main_account
     attr_accessor :latest_cache_flows 
+
+    def to_s
+      "#<MizuhoDirectInfo #{username} #{mailaddr} #{main_account}>"
+    end
   end
 
   class MizuhoCacheFlow
     attr_accessor :date
-    attr_accessor :value
     attr_accessor :summary
-
     attr_accessor :money_in
     attr_accessor :money_out
+
+    def initialize(options={})
+      options.each{ |key, value|
+        instance_variable_set("@#{key}", value)
+      }
+    end
+
+    def value
+      @money_in == 0 ? -@money_out : @money_in
+    end
+
+    def to_s
+      "#<MizuhoCacheFlow: #{@date.strftime("%Y/%m/%d")} #{@summary} #{self.value}>"
+    end
   end
 
   class MizuhoAccount
@@ -232,6 +281,16 @@ class MizuhoBank
     attr_accessor :money  # 残高
     attr_accessor :usable_money  # お引き出し可能残高
     attr_accessor :cache_flows # C/F明細
+
+    def initialize(options={})
+      options.each{ |key, value|
+        instance_variable_set("@#{key}", value)
+      }
+    end
+
+    def to_s
+      "#<MizuhoAccount #{@name}:#{@deal_type}:#{@number} $#{@money}(#{@usable_money})>"
+    end
   end
 end
 
