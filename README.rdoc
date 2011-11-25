@@ -1,4 +1,9 @@
-= mizuho_bank : みずほ銀行ウェブサイトから口座残高を取得するスクリプト
+= mizuho_bank : みずほ銀行ウェブサイトのRuby Interface
+
+== インストール
+ gem install mizuho_bank
+
+== 使い方 (こんな感じで)
 
   # encoding: utf-8
   Encoding.default_external = Encoding.default_internal = "UTF-8"
@@ -26,4 +31,6 @@
     p bank.info.main_account.money
   }
 
+== 既知の問題
+まだ画像認証に対応してない。画像認証は秘密の質問に失敗しまくってるとやらなきゃいけなくなる
 
