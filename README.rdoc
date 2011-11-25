@@ -7,7 +7,7 @@
 
   # encoding: utf-8
   Encoding.default_external = Encoding.default_internal = "UTF-8"
-  require_relative 'mizuho_bank'
+  require 'mizuho_bank'
   require 'pit'
 
   pit = Pit.get("MizuhoBank", :require => {
