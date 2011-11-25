@@ -1,19 +1,29 @@
-みずほ銀行ウェブサイトから口座残高を取得するスクリプト
+= mizuho_bank : みずほ銀行ウェブサイトから口座残高を取得するスクリプト
 
-2009年頃に正しく動作していることを確認しているのですが、現在は不明
-たぶんUI変わってるだろうし無理
+  # encoding: utf-8
+  Encoding.default_external = Encoding.default_internal = "UTF-8"
+  require_relative 'mizuho_bank'
+  require 'pit'
 
-暇を見つけて今後修正していく予定なので一応githubにアップ
+  pit = Pit.get("MizuhoBank", :require => {
+    "keiyaku_no" => "keiyaku_no",
+    "password" => "password",
+    "aikotoba1_question" => "aikotoba1_question",
+    "aikotoba2_question" => "aikotoba2_question",
+    "aikotoba3_question" => "aikotoba3_question",
+    "aikotoba1_answer" => "aikotoba1_answer",
+    "aikotoba2_answer" => "aikotoba2_answer",
+    "aikotoba3_answer" => "aikotoba3_answer",
+  })
 
-__
-ちなみに当時の使い方は
-1. Firefoxでみずほ銀行ウェブサイトにログイン
-2. ./bin/cookie.plでfirefoxのsqlite3データベースからcookie情報を取得
-3. そのcookie情報を元に、mizuho.rbを実行って感じです
--------------------
-MizuhoBank.start(pit['username'], pit['password'], pit['aikotoba1'], pit['aikotoba2']){ |bank|
-  p bank.money
-}
--------------------
-とすると標準出力に、口座残高が出力される
+  aikotoba_dict = {
+    pit['aikotoba1_question'] => pit['aikotoba1_answer'],
+    pit['aikotoba2_question'] => pit['aikotoba2_answer'],
+    pit['aikotoba3_question'] => pit['aikotoba3_answer']
+  }
+
+  MizuhoBank.new(pit['keiyaku_no'].to_s, pit['password'].to_s, aikotoba_dict){ |bank|
+    p bank.info.main_account.money
+  }
+
 
