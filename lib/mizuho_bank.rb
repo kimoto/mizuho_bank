@@ -4,17 +4,13 @@ require 'kconv'
 require 'logger'
 require 'retry-handler'
 require 'moji'
+require 'chronic'
+require 'open-uri'
 
 # utility class
 class String
   def trim_no_number
     self.gsub(/[^0-9]/, "")
-  end
-end
-
-class Time
-  def self.mizuho_time_parse(string)
-    p string
   end
 end
 
@@ -41,6 +37,10 @@ class MizuhoBank
     @agent = nil
     @logger = Logger.new(nil)
     @logger = logger unless logger.nil?
+
+    unless MizuhoBank.is_available?
+      raise "MizuhoBank is not available"
+    end
 
     if login(keiyaku_no, password, aikotoba_dict)
       block.call(self) if block_given?
@@ -72,6 +72,8 @@ class MizuhoBank
           auth_password(password)
         when :logout_fail_info
           raise "Logout fail info page!!"
+        when :not_available_page
+          raise "not available page"
         when :unknown
           @logger.info "unknown page reached: #{@agent.page.title}"
           @login_result = true
@@ -86,6 +88,123 @@ class MizuhoBank
       end
     end.retry(:logger => @logger, :accept_exception => StandardError, :wait => 5, :max => 5)
     @login_result
+  end
+
+  def self.is_available?(time = Time.now)
+    get_jikangai_ranges(time).each{ |range|
+      if range.cover? time
+        return false
+      end
+    }
+    return true
+  end
+
+  class RepeatDate
+    attr_accessor :wday
+    attr_accessor :hour
+    attr_accessor :minute
+
+    def to_s
+      if @wday.nil?
+        "%02d:%02d" % [@hour, @minute]
+      else
+        "%s %02d:%02d" % [wday, @hour, @minute]
+      end
+    end
+  end
+
+  class RepeatDateRange
+    attr_accessor :start
+    attr_accessor :end
+
+    def initialize
+      @start = RepeatDate.new
+      @end = RepeatDate.new
+    end
+    
+    def cover? (time, context = Time.now)
+      s = start_time(context)
+      e = end_time(s)
+      (s .. e).cover? (time)
+    end
+
+    def include? (*args)
+      cover? *args
+    end
+
+    def start_time(context = Time.now)
+      Chronic.parse(translate_in_this_month(@start.to_s, context), :now => context)
+    end
+
+    def end_time(context = Time.now)
+      Chronic.parse(translate_in_this_month(@end.to_s, context), :now => context)
+    end
+
+    def translate_in_this_month(text, context=Time.now)
+      if text.match(/(.*?)(.+) (.+) in this month(.*)/)
+        month = context.strftime("%B")
+        previous = Regexp.last_match(1)
+        n = Regexp.last_match(2)
+        wday = Regexp.last_match(3)
+        last = Regexp.last_match(4)
+
+        time = Chronic.parse("#{n} #{wday} in #{month}")
+        time.strftime("#{previous} %Y/%m/%d #{last}")
+      else
+        text
+      end
+    end
+
+    def to_s(context = Time.now)
+      s = start_time(context)
+      e = end_time(s)
+      "#{s} - #{e}"
+    end
+  end
+
+  def self.get_jikangai_ranges(context = Time.now)
+    url = "http://www.mizuhobank.co.jp/direct/jikangai.html"
+    body = open(url).read.toutf8
+    doc = Nokogiri(body)
+    unless body.include? "以下の時間帯は、インターネットバンキングをご利用いただけません。"
+      raise "page format error"
+    end
+
+    dates = doc.search("#contents > div.section > div.inner > table :first-child > th > ul.normal > li > strong").map(&:text)
+
+    ranges = []
+    if dates.first =~ /土曜日(\d+)時(\d+)分～翌日曜日(\d+)時(\d+)分/
+      range = RepeatDateRange.new
+      range.start.wday = "last saturday"
+      range.start.hour = Regexp.last_match(1).to_i
+      range.start.minute = Regexp.last_match(2).to_i
+      range.end.wday = "next sunday"
+      range.end.hour = Regexp.last_match(3).to_i
+      range.end.minute = Regexp.last_match(4).to_i
+      ranges << range
+    end
+
+    if dates.second =~ /第1・第4土曜日(\d+)時(\d+)分～(\d+)時(\d+)分/
+      range = RepeatDateRange.new
+      range.start.wday = "1st saturday in this month"
+      range.start.hour = Regexp.last_match(1).to_i
+      range.start.minute = Regexp.last_match(2).to_i
+      range.end.wday = nil
+      range.end.hour = Regexp.last_match(3).to_i
+      range.end.minute = Regexp.last_match(4).to_i
+      ranges << range
+
+      range = RepeatDateRange.new
+      range.start.wday = "4th saturday in this month"
+      range.start.hour = Regexp.last_match(1).to_i
+      range.start.minute = Regexp.last_match(2).to_i
+      range.end.wday = nil
+      range.end.hour = Regexp.last_match(3).to_i
+      range.end.minute = Regexp.last_match(4).to_i
+      ranges << range
+    end
+
+    ranges
   end
 
   private
@@ -137,6 +256,10 @@ class MizuhoBank
     @agent.page.body.toutf8.include? "ログインできませんでした。前回の操作で正しくログアウトされていない可能性があります。"
   end
 
+  def is_not_available_page?
+    @agent.page.body.toutf8.include? "以下の時間帯は、インターネットバンキングをご利用いただけません"
+  end
+
   def auth_password(password)
     @agent.page.form_with(:name => 'FORM1'){ |f|
       f.field_with(:name => 'Anshu1No').value = password.tosjis
@@ -157,6 +280,8 @@ class MizuhoBank
       return :auth_password
     elsif is_auth_keiyaku_no_page?
       return :auth_keiyaku_no
+    elsif is_not_available_page?
+      return :not_available
     else
       return :unknown
     end
