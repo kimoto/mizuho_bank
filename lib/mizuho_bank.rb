@@ -48,6 +48,29 @@ class MizuhoBank
     self
   end
 
+  def self.new_with_pit(logger = nil, &block)
+    pit = Pit.get("MizuhoBank",
+                  :require => {
+                    "keiyaku_no" => "keiyaku_no",
+                    "password" => "password",
+                    "aikotoba1_question" => "aikotoba1_question",
+                    "aikotoba2_question" => "aikotoba2_question",
+                    "aikotoba3_question" => "aikotoba3_question",
+                    "aikotoba1_answer" => "aikotoba1_answer",
+                    "aikotoba2_answer" => "aikotoba2_answer",
+                    "aikotoba3_answer" => "aikotoba3_answer",
+                  })
+
+    aikotoba_dict = {
+      pit['aikotoba1_question'] => pit['aikotoba1_answer'],
+      pit['aikotoba2_question'] => pit['aikotoba2_answer'],
+      pit['aikotoba3_question'] => pit['aikotoba3_answer']
+    }
+    self.new(pit['keiyaku_no'].to_s, pit['password'].to_s, aikotoba_dict, logger){ |bank|
+      block.call(bank)
+    }
+  end
+
   def login(keiyaku_no, password, aikotoba_dict={})
     @login_result = false
     Proc.new do
@@ -121,7 +144,7 @@ class MizuhoBank
       @start = RepeatDate.new
       @end = RepeatDate.new
     end
-    
+
     def cover? (time, context = Time.now)
       s = start_time(context)
       e = end_time(s)
