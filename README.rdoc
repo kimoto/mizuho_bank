@@ -6,7 +6,6 @@
 == 使い方 (こんな感じで)
 
   # encoding: utf-8
-  Encoding.default_external = Encoding.default_internal = "UTF-8"
   require 'mizuho_bank'
   require 'pit'
 
@@ -30,6 +29,17 @@
   MizuhoBank.new(pit['keiyaku_no'].to_s, pit['password'].to_s, aikotoba_dict){ |bank|
     p bank.info.main_account.money
   }
+
+== 用例集
+1. 口座残高取得したいとき
+  bank.info.main_account.money
+
+2. 最近の取引履歴を配列で取得したいとき
+  bank.info.main_account.cache_flows
+
+3. 口座番号とか種別しりたいとき
+  bank.info.main_account.number
+  bank.info.main_account.type
 
 == 既知の問題
 まだ画像認証に対応してない。画像認証は秘密の質問に失敗しまくってるとやらなきゃいけなくなる
