@@ -6,6 +6,8 @@ require 'retry-handler'
 require 'moji'
 require 'chronic'
 require 'open-uri'
+require 'pit'
+require 'active_support/all'
 
 # utility class
 class String
